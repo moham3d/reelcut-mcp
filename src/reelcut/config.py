@@ -32,7 +32,8 @@ def find_filmcraft_cli() -> str | None:
 
 
 WINDOWS_ARABIC_FONT_NAMES = [
-    "Arsenica-Arabic-Light-TRIAL.ttf",
+    "PlaypenSansArabic[wght].ttf",
+    "PlaypenSansArabic-Bold.ttf",
     "Cairo-Bold.ttf",
     "Tajawal-Bold.ttf",
     "tahomabd.ttf",
@@ -43,12 +44,14 @@ WINDOWS_ARABIC_FONT_NAMES = [
 
 
 def find_default_arabic_font() -> str:
-    """Locate the best available Arabic-capable TTF font in Windows system/user fonts."""
+    """Locate the best available Arabic-capable TTF font in bundled or Windows fonts."""
     env_font = os.getenv("REELCUT_FONT_PATH", "").strip()
     if env_font and Path(env_font).is_file():
         return env_font
 
+    repo_fonts = Path(__file__).resolve().parents[2] / "assets" / "fonts"
     font_dirs = [
+        repo_fonts,
         Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Fonts",
         Path(r"C:\Windows\Fonts"),
     ]

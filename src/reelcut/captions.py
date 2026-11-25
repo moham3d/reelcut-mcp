@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -150,6 +151,117 @@ def _render_chunk_frame(
     return out_path
 
 
+def _render_states_with_browser(
+    jobs: list[tuple[list[dict[str, Any]], int, Path]],
+    width: int,
+    style: CaptionStyle,
+    font_path: str,
+) -> bool:
+    """Render Arabic RTL caption states using Edge/Chrome HarfBuzz shaping."""
+    if not jobs:
+        return True
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return False
+
+    font_uri = Path(font_path).resolve().as_uri()
+    template_html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<style>
+@font-face {{
+  font-family: 'ReelCutFont';
+  src: url('{font_uri}');
+  font-weight: 100 900;
+  font-style: normal;
+}}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{
+  width: {width}px;
+  height: {style.overlay_height}px;
+  background: transparent;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'ReelCutFont', 'Tahoma', sans-serif;
+}}
+.pill {{
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  max-width: {width - 110}px;
+  padding: {style.pill_padding_y}px {style.pill_padding_x}px;
+  border-radius: {style.pill_radius}px;
+  background: rgba({style.pill_bg_color[0]}, {style.pill_bg_color[1]}, {style.pill_bg_color[2]}, {style.pill_bg_color[3] / 255:.3f});
+  direction: rtl;
+  unicode-bidi: isolate;
+}}
+.w {{
+  font-size: {style.font_size}px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: rgb({style.text_color[0]}, {style.text_color[1]}, {style.text_color[2]});
+  -webkit-text-stroke: {style.stroke_width * 2}px rgb({style.stroke_color[0]}, {style.stroke_color[1]}, {style.stroke_color[2]});
+  paint-order: stroke fill;
+  text-shadow: 0 3px 10px rgba(0,0,0,0.65);
+  white-space: nowrap;
+}}
+.w.active {{
+  color: rgb({style.highlight_color[0]}, {style.highlight_color[1]}, {style.highlight_color[2]});
+  transform: scale(1.06);
+}}
+</style>
+</head>
+<body><div id="pill" class="pill"></div></body>
+</html>"""
+
+    try:
+        with sync_playwright() as p:
+            browser = None
+            for channel in ("msedge", "chrome"):
+                try:
+                    browser = p.chromium.launch(channel=channel, headless=True)
+                    break
+                except Exception:
+                    continue
+            if browser is None:
+                return False
+
+            page = browser.new_page(viewport={"width": width, "height": style.overlay_height})
+            page.set_content(template_html, wait_until="load")
+            page.evaluate("() => document.fonts.ready")
+
+            for chunk, word_idx, png_path in jobs:
+                spans = []
+                for idx, w in enumerate(chunk):
+                    cls = "w active" if idx == word_idx else "w"
+                    spans.append(f'<span class="{cls}">{html.escape(str(w["word"]))}</span>')
+                inner = "".join(spans)
+                page.evaluate(
+                    """(markup) => {
+                        const el = document.getElementById('pill');
+                        el.innerHTML = markup;
+                        el.style.transform = 'scale(1)';
+                        const maxW = window.innerWidth - 110;
+                        if (el.scrollWidth > maxW && el.scrollWidth > 0) {
+                            el.style.transform = `scale(${(maxW / el.scrollWidth).toFixed(3)})`;
+                        }
+                    }""",
+                    inner,
+                )
+                page.screenshot(path=str(png_path), omit_background=True)
+            browser.close()
+        return True
+    except Exception:
+        return False
+
+
 def render_caption_states(
     timeline_words: list[dict[str, Any]],
     work_dir: Path,
@@ -165,7 +277,6 @@ def render_caption_states(
     blank_png = captions_dir / "blank.png"
     Image.new("RGBA", (width, cfg_style.overlay_height), (0, 0, 0, 0)).save(blank_png, format="PNG")
 
-    font = _load_font(font_path, cfg_style.font_size)
     chunks = _chunk_words(
         timeline_words,
         target_size=cfg_style.words_per_chunk,
@@ -174,6 +285,7 @@ def render_caption_states(
     )
 
     states: list[CaptionState] = []
+    jobs: list[tuple[list[dict[str, Any]], int, Path]] = []
     state_counter = 0
 
     for chunk in chunks:
@@ -191,8 +303,13 @@ def render_caption_states(
 
             state_counter += 1
             png_path = captions_dir / f"cap_{state_counter:04d}.png"
-            _render_chunk_frame(chunk, word_idx, width, cfg_style, font, png_path)
+            jobs.append((chunk, word_idx, png_path))
             states.append(CaptionState(start=w_start, end=w_end, image_path=png_path))
+
+    if not _render_states_with_browser(jobs, width, cfg_style, font_path):
+        font = _load_font(font_path, cfg_style.font_size)
+        for chunk, word_idx, png_path in jobs:
+            _render_chunk_frame(chunk, word_idx, width, cfg_style, font, png_path)
 
     return states, blank_png, captions_dir
 
