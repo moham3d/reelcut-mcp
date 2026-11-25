@@ -1,0 +1,28 @@
+{
+  "title": "مثال خطة مونتاج",
+  "segments": [
+    {
+      "clip_id": "c01",
+      "start": 1.2,
+      "end": 4.8,
+      "corrected_text": "البخور اللي بتولّعه كل جمعة في المعمل طلع أسوأ من السيجارة!",
+      "zoom": false
+    },
+    {
+      "clip_id": "c01",
+      "start": 6.1,
+      "end": 10.4,
+      "corrected_text": "دراسة صينية لقوا في دخان البخور 64 مادة كيميائية وأذى الـDNA أكتر.",
+      "zoom": true,
+      "qr_url": "https://link.springer.com/article/10.1007/s10311-015-0521-7",
+      "qr_label": "المصدر"
+    },
+    {
+      "clip_id": "c02",
+      "start": 2.0,
+      "end": 6.5,
+      "corrected_text": "والحل إنك تفتح الشباك وماتنامش والبخور والع. ستاي سيف.",
+      "zoom": false
+    }
+  ]
+}

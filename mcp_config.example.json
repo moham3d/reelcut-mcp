@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "reelcut": {
+      "command": "C:\\Users\\YOUR_USER\\Desktop\\reelcut-mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "reelcut.mcp_server"]
+    }
+  }
+}

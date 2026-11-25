@@ -1,0 +1,14 @@
+# ReelCut MCP
+
+> Token-efficient local 9:16 Arabic video editing pipeline & MCP server for Windows (CPU-only) and AI agents.
+
+## Docs
+- [AGENTS.md](AGENTS.md): Complete guide for AI agents (workflow, token rules, module map, verification).
+- [README.md](README.md): Installation, Windows setup, CLI commands, and MCP configuration.
+- [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md): Exact MCP tool signatures, EditPlan JSON schema, and outputs.
+- [.agents/skills/reelcut/SKILL.md](.agents/skills/reelcut/SKILL.md): Agent skill runbook for automated reel editing.
+
+## Examples
+- [examples/sample_script.txt](examples/sample_script.txt): Sample colloquial Arabic script with source URLs.
+- [examples/sample_plan.json](examples/sample_plan.json): Valid EditPlan JSON with zoom cuts and source QR overlays.
+- [mcp_config.example.json](mcp_config.example.json): Stdio MCP configuration template.
