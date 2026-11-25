@@ -12,3 +12,5 @@ brolls_cache/
 dist/
 build/
 *.egg-info/
+bin/*.exe
+bin/filmcraft-cli*

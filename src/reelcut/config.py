@@ -12,14 +12,23 @@ from dotenv import load_dotenv
 
 FILMCRAFT_CANDIDATES = [
     r"C:\Program Files\ArtCraft\FilmCraft\filmcraft-cli.exe",
+    "/usr/local/bin/filmcraft-cli",
+    "/opt/artcraft/filmcraft-cli",
+    "/usr/bin/filmcraft-cli",
 ]
 
 
 def find_filmcraft_cli() -> str | None:
-    """Locate FilmCraft headless CLI if installed on the system."""
+    """Locate FilmCraft headless CLI (env -> portable bin/ -> PATH -> OS defaults)."""
     env_fc = os.getenv("REELCUT_FILMCRAFT_PATH", "").strip()
     if env_fc and Path(env_fc).is_file():
         return env_fc
+
+    repo_bin = Path(__file__).resolve().parents[2] / "bin"
+    for bin_name in ("filmcraft-cli.exe", "filmcraft-cli"):
+        local_bin = repo_bin / bin_name
+        if local_bin.is_file():
+            return str(local_bin)
 
     on_path = shutil.which("filmcraft-cli")
     if on_path:
@@ -54,12 +63,23 @@ def find_default_arabic_font() -> str:
         repo_fonts,
         Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Fonts",
         Path(r"C:\Windows\Fonts"),
+        Path("/usr/share/fonts/truetype"),
+        Path("/usr/share/fonts"),
+        Path.home() / ".local" / "share" / "fonts",
     ]
     for name in WINDOWS_ARABIC_FONT_NAMES:
         for folder in font_dirs:
             candidate = folder / name
             if candidate.is_file():
                 return str(candidate)
+    # Linux fallback: common Noto Sans Arabic / DejaVu Sans
+    for linux_font in (
+        "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ):
+        if Path(linux_font).is_file():
+            return linux_font
 
     raise FileNotFoundError(
         "No Arabic-capable TrueType font found. Set REELCUT_FONT_PATH in .env."
@@ -103,6 +123,7 @@ class ReelcutConfig:
     ffmpeg_path: str = ""
     filmcraft_path: str | None = None
     render_backend: str = "auto"
+    color_preset: str = "none"
     font_path: str = ""
     caption_style: CaptionStyle = field(default_factory=CaptionStyle)
 
@@ -130,5 +151,6 @@ class ReelcutConfig:
             ffmpeg_path=os.getenv("REELCUT_FFMPEG_PATH", "").strip(),
             filmcraft_path=find_filmcraft_cli(),
             render_backend=os.getenv("REELCUT_RENDER_BACKEND", "auto").strip().lower() or "auto",
+            color_preset=os.getenv("REELCUT_COLOR_PRESET", "none").strip().lower() or "none",
             font_path=find_default_arabic_font(),
         )

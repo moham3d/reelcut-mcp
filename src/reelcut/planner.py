@@ -219,6 +219,7 @@ def save_edit_plan(
     )
     resolved_payload = {
         "total_duration": timeline_cursor,
+        "color_preset": plan.color_preset,
         "segments": resolved_segments,
         "timeline_words": all_timeline_words,
         "brolls": resolved_brolls,

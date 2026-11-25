@@ -16,6 +16,26 @@ from .media import get_ffmpeg_exe, probe_media
 
 TICKS_PER_SEC = 254_016_000_000
 
+FILMCRAFT_COLOR_PRESETS: dict[str, list[tuple[str, dict[str, Any]]]] = {
+    "clean": [
+        ("lumetri", {"basic_on": True, "contrast": 10.0, "saturation": 105.0, "vibrance": 12.0, "sharpen": 15.0}),
+    ],
+    "warm": [
+        ("lumetri", {"basic_on": True, "temperature": 12.0, "contrast": 10.0, "saturation": 108.0, "vibrance": 15.0}),
+    ],
+    "cinematic": [
+        ("lumetri", {"basic_on": True, "contrast": 18.0, "shadows": -10.0, "highlights": -8.0, "saturation": 96.0, "vibrance": 18.0, "vignette_on": True, "vignette_amount": -18.0}),
+    ],
+    "crisp": [
+        ("lumetri", {"basic_on": True, "contrast": 14.0, "saturation": 104.0, "sharpen": 28.0}),
+        ("sharpen", {"amount": 18.0}),
+    ],
+    "bw": [
+        ("black_white", {}),
+        ("brightness_contrast", {"contrast": 15.0}),
+    ],
+}
+
 
 def _run_fc(fc_exe: str, args: list[str], stdin_text: str | None = None) -> str:
     proc = subprocess.run(
@@ -314,6 +334,9 @@ def render_with_filmcraft(
     fx_cmds: list[dict[str, Any]] = []
     res_iter = iter(place_results)
 
+    preset_name = (timeline.get("color_preset") or cfg.color_preset or "none").strip().lower()
+    preset_effects = FILMCRAFT_COLOR_PRESETS.get(preset_name, [])
+
     for meta in seg_meta:
         v_clip = int(next(res_iter)["result"]["clips"][0])
         sw, sh = clip_dims.get(v_clip, (float(cfg.target_width), float(cfg.target_height)))
@@ -325,6 +348,15 @@ def render_with_filmcraft(
                 "params": {"clip": v_clip, "effect": "motion", "param": "scale", "value": final_scale},
             }
         )
+        for eff_id, eff_params in preset_effects:
+            fx_cmds.append({"id": "effects.apply", "params": {"clips": [v_clip], "effect": eff_id}})
+            for p_name, p_val in eff_params.items():
+                fx_cmds.append(
+                    {
+                        "id": "effects.setParam",
+                        "params": {"clip": v_clip, "effect": eff_id, "param": p_name, "value": p_val},
+                    }
+                )
 
     for _ in broll_meta:
         v_clip = int(next(res_iter)["result"]["clips"][0])

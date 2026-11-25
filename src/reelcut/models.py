@@ -73,4 +73,5 @@ class EditPlan(BaseModel):
 
     title: str = ""
     summary_ar: str = ""
+    color_preset: str | None = None
     segments: list[PlannedSegment] = Field(min_length=1)

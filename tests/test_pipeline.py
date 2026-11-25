@@ -259,3 +259,27 @@ def test_hybrid_pack_creates_audio_and_thumbnails(tmp_path: Path) -> None:
     assert res["has_script"] is True
     assert (proj / "work" / "hybrid_map.json").is_file()
     assert (proj / "work" / "words_detail.json").is_file()
+
+
+def test_portable_filmcraft_discovery_and_color_preset(tmp_path: Path, monkeypatch) -> None:
+    from reelcut.config import find_filmcraft_cli
+    from reelcut.filmcraft import FILMCRAFT_COLOR_PRESETS
+    from reelcut.models import EditPlan
+    from reelcut.renderer import FFMPEG_COLOR_PRESETS
+
+    monkeypatch.delenv("REELCUT_FILMCRAFT_PATH", raising=False)
+    found = find_filmcraft_cli()
+    # On this machine bin/filmcraft-cli.exe is present
+    if found:
+        assert Path(found).is_file()
+
+    assert set(FILMCRAFT_COLOR_PRESETS.keys()) == set(FFMPEG_COLOR_PRESETS.keys())
+    plan = EditPlan.model_validate(
+        {
+            "color_preset": "clean",
+            "segments": [
+                {"clip_id": "c01", "start": 0.0, "end": 1.0, "corrected_text": "أهلاً"}
+            ],
+        }
+    )
+    assert plan.color_preset == "clean"

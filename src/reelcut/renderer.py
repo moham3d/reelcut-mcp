@@ -15,12 +15,22 @@ def _escape_filter_path(path: Path) -> str:
     return str(path.resolve()).replace("\\", "/").replace(":", r"\:")
 
 
+FFMPEG_COLOR_PRESETS: dict[str, str] = {
+    "clean": "eq=contrast=1.06:saturation=1.06,unsharp=3:3:0.4",
+    "warm": "colorbalance=rs=0.04:gs=0.01:bs=-0.04,eq=contrast=1.05:saturation=1.08",
+    "cinematic": "eq=contrast=1.10:brightness=-0.02:saturation=0.95,vignette=angle=PI/5",
+    "crisp": "eq=contrast=1.08:saturation=1.04,unsharp=5:5:0.7",
+    "bw": "hue=s=0,eq=contrast=1.12",
+}
+
+
 def _render_base_talking_head(
     segments: list[dict[str, Any]],
     out_mp4: Path,
     cfg: ReelcutConfig,
     ffmpeg_exe: str,
     filter_dir: Path,
+    color_preset: str = "none",
 ) -> Path:
     """Trim, crop to 9:16, apply optional 1.12x zoom, and concat talking-head segments."""
     args: list[str] = []
@@ -48,17 +58,20 @@ def _render_base_talking_head(
         v_label = f"v{seg['index']}"
         a_label = f"a{seg['index']}"
 
+        color_vf = FFMPEG_COLOR_PRESETS.get(color_preset.strip().lower(), "")
+        color_suffix = f",{color_vf}" if color_vf else ""
+
         if seg.get("zoom"):
             v_chain = (
                 f"[{src_in}:v]fps={fps},"
                 f"scale={zoom_w}:{zoom_h}:force_original_aspect_ratio=increase,"
-                f"crop={w}:{h},setsar=1,setpts=PTS-STARTPTS[{v_label}]"
+                f"crop={w}:{h}{color_suffix},setsar=1,setpts=PTS-STARTPTS[{v_label}]"
             )
         else:
             v_chain = (
                 f"[{src_in}:v]fps={fps},"
                 f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                f"crop={w}:{h},setsar=1,setpts=PTS-STARTPTS[{v_label}]"
+                f"crop={w}:{h}{color_suffix},setsar=1,setpts=PTS-STARTPTS[{v_label}]"
             )
 
         a_chain = (
@@ -138,9 +151,10 @@ def render_video(project_dir: str | Path, backend: str | None = None) -> dict[st
     qr_overlays = timeline.get("qr_overlays", [])
     timeline_words = timeline.get("timeline_words", [])
 
-    # 1. Build base talking-head video with enhanced audio + occasional zoom-in
+    # 1. Build base talking-head video with enhanced audio + occasional zoom-in + color preset
     base_mp4 = work_dir / "base_talking_head.mp4"
-    _render_base_talking_head(segments, base_mp4, cfg, ffmpeg_exe, work_dir)
+    preset_name = str(timeline.get("color_preset") or cfg.color_preset or "none")
+    _render_base_talking_head(segments, base_mp4, cfg, ffmpeg_exe, work_dir, color_preset=preset_name)
 
     # 2. Generate dynamic Arabic RTL word-highlighted caption overlay stream
     captions_manifest = build_caption_concat_manifest(
