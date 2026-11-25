@@ -42,6 +42,7 @@ def find_filmcraft_cli() -> str | None:
 
 WINDOWS_ARABIC_FONT_NAMES = [
     "PlaypenSansArabic[wght].ttf",
+    "MarkaziText[wght].ttf",
     "PlaypenSansArabic-Bold.ttf",
     "Cairo-Bold.ttf",
     "Tajawal-Bold.ttf",
