@@ -403,7 +403,65 @@ def render_qr_badge(
     badge.paste(qr_img, (pad, pad))
 
     if label.strip():
-        font = _load_font(font_path, 22)
+        rendered_with_browser = False
+        try:
+            import base64
+            import io
+            from playwright.sync_api import sync_playwright
+
+            buf = io.BytesIO()
+            qr_img.save(buf, format="PNG")
+            qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            font_uri = Path(font_path).resolve().as_uri()
+            badge_html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8" />
+<style>
+@font-face {{ font-family: 'ReelCutFont'; src: url('{font_uri}'); font-weight: 100 900; }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{ width: {badge_w}px; height: {badge_h}px; background: transparent; overflow: hidden; }}
+.card {{
+  width: {badge_w}px; height: {badge_h}px;
+  background: rgba(15, 15, 20, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 16px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding-top: {pad}px; gap: 4px;
+}}
+img {{ width: {qr_w}px; height: {qr_h}px; display: block; border-radius: 6px; }}
+.lbl {{
+  font-family: 'ReelCutFont', 'Tahoma', sans-serif;
+  font-size: 22px; font-weight: 700; color: #FFD60A; line-height: 1.2;
+}}
+</style></head>
+<body><div class="card"><img src="data:image/png;base64,{qr_b64}" /><div class="lbl">{html.escape(label.strip())}</div></div></body>
+</html>"""
+            with sync_playwright() as p:
+                for channel in ("msedge", "chrome"):
+                    try:
+                        browser = p.chromium.launch(channel=channel, headless=True)
+                        page = browser.new_page(viewport={"width": badge_w, "height": badge_h})
+                        page.set_content(badge_html, wait_until="load")
+                        page.evaluate("() => document.fonts.ready")
+                        out_path.parent.mkdir(parents=True, exist_ok=True)
+                        page.screenshot(path=str(out_path), omit_background=True)
+                        browser.close()
+                        rendered_with_browser = True
+                        break
+                    except Exception:
+                        continue
+        except Exception:
+            rendered_with_browser = False
+
+        if rendered_with_browser:
+            return out_path
+
+        # Fallback: use Tahoma/Arial bold for Pillow BASIC shaping if browser unavailable
+        fallback_font_path = font_path
+        for cand in (r"C:\Windows\Fonts\tahomabd.ttf", r"C:\Windows\Fonts\arialbd.ttf"):
+            if Path(cand).is_file() and "Playpen" in Path(font_path).name:
+                fallback_font_path = cand
+                break
+        font = _load_font(fallback_font_path, 22)
         visual_label = _shape_arabic_word(label.strip())
         bbox = draw.textbbox((0, 0), visual_label, font=font)
         lw = bbox[2] - bbox[0]
