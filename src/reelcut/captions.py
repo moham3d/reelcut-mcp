@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import html
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -118,16 +120,17 @@ def _render_chunk_frame(
     center_x = width // 2
     center_y = style.overlay_height // 2
 
-    pill_left = center_x - (total_text_w // 2) - style.pill_padding_x
-    pill_right = center_x + (total_text_w // 2) + style.pill_padding_x
-    pill_top = center_y - (line_height // 2) - style.pill_padding_y
-    pill_bottom = center_y + (line_height // 2) + style.pill_padding_y
+    if style.pill_bg_color[3] > 0:
+        pill_left = center_x - (total_text_w // 2) - style.pill_padding_x
+        pill_right = center_x + (total_text_w // 2) + style.pill_padding_x
+        pill_top = center_y - (line_height // 2) - style.pill_padding_y
+        pill_bottom = center_y + (line_height // 2) + style.pill_padding_y
 
-    draw.rounded_rectangle(
-        [pill_left, pill_top, pill_right, pill_bottom],
-        radius=style.pill_radius,
-        fill=style.pill_bg_color,
-    )
+        draw.rounded_rectangle(
+            [pill_left, pill_top, pill_right, pill_bottom],
+            radius=style.pill_radius,
+            fill=style.pill_bg_color,
+        )
 
     # Draw logical words Right-to-Left so spoken order matches Arabic reading order
     cursor_right = center_x + (total_text_w // 2)
@@ -151,6 +154,14 @@ def _render_chunk_frame(
     return out_path
 
 
+def _font_data_uri(font_path: str) -> str:
+    """Embed TTF/OTF as base64 data URI so headless Edge/Chrome never blocks file://."""
+    raw = Path(font_path).read_bytes()
+    b64 = base64.b64encode(raw).decode("ascii")
+    mime = "font/otf" if font_path.lower().endswith(".otf") else "font/ttf"
+    return f"data:{mime};base64,{b64}"
+
+
 def _render_states_with_browser(
     jobs: list[tuple[list[dict[str, Any]], int, Path]],
     width: int,
@@ -165,7 +176,12 @@ def _render_states_with_browser(
     except Exception:
         return False
 
-    font_uri = Path(font_path).resolve().as_uri()
+    font_uri = _font_data_uri(font_path)
+    bg_css = (
+        f"rgba({style.pill_bg_color[0]}, {style.pill_bg_color[1]}, {style.pill_bg_color[2]}, {style.pill_bg_color[3] / 255:.3f})"
+        if style.pill_bg_color[3] > 0
+        else "transparent"
+    )
     template_html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -198,7 +214,7 @@ html, body {{
   max-width: {width - 110}px;
   padding: {style.pill_padding_y}px {style.pill_padding_x}px;
   border-radius: {style.pill_radius}px;
-  background: rgba({style.pill_bg_color[0]}, {style.pill_bg_color[1]}, {style.pill_bg_color[2]}, {style.pill_bg_color[3] / 255:.3f});
+  background: {bg_css};
   direction: rtl;
   unicode-bidi: isolate;
 }}
@@ -209,12 +225,12 @@ html, body {{
   color: rgb({style.text_color[0]}, {style.text_color[1]}, {style.text_color[2]});
   -webkit-text-stroke: {style.stroke_width * 2}px rgb({style.stroke_color[0]}, {style.stroke_color[1]}, {style.stroke_color[2]});
   paint-order: stroke fill;
-  text-shadow: 0 3px 10px rgba(0,0,0,0.65);
+  filter: drop-shadow(0 5px 10px rgba(0,0,0,0.9)) drop-shadow(0 2px 4px rgba(0,0,0,0.85));
   white-space: nowrap;
 }}
 .w.active {{
   color: rgb({style.highlight_color[0]}, {style.highlight_color[1]}, {style.highlight_color[2]});
-  transform: scale(1.06);
+  transform: scale(1.07);
 }}
 </style>
 </head>
@@ -405,14 +421,12 @@ def render_qr_badge(
     if label.strip():
         rendered_with_browser = False
         try:
-            import base64
-            import io
             from playwright.sync_api import sync_playwright
 
             buf = io.BytesIO()
             qr_img.save(buf, format="PNG")
             qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-            font_uri = Path(font_path).resolve().as_uri()
+            font_uri = _font_data_uri(font_path)
             badge_html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8" />
 <style>

@@ -94,12 +94,12 @@ class CaptionStyle:
     words_per_chunk: int = 3
     min_words_per_chunk: int = 2
     max_words_per_chunk: int = 4
-    font_size: int = 66
+    font_size: int = 70
     text_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     highlight_color: tuple[int, int, int, int] = (255, 214, 10, 255)
     stroke_color: tuple[int, int, int, int] = (12, 12, 16, 255)
     stroke_width: int = 6
-    pill_bg_color: tuple[int, int, int, int] = (15, 15, 20, 145)
+    pill_bg_color: tuple[int, int, int, int] = (0, 0, 0, 0)
     pill_padding_x: int = 28
     pill_padding_y: int = 16
     pill_radius: int = 22
