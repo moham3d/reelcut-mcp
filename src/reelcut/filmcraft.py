@@ -24,7 +24,7 @@ FILMCRAFT_COLOR_PRESETS: dict[str, list[tuple[str, dict[str, Any]]]] = {
         ("lumetri", {"basic_on": True, "temperature": 12.0, "contrast": 10.0, "saturation": 108.0, "vibrance": 15.0}),
     ],
     "cinematic": [
-        ("lumetri", {"basic_on": True, "contrast": 18.0, "shadows": -10.0, "highlights": -8.0, "saturation": 96.0, "vibrance": 18.0, "vignette_on": True, "vignette_amount": -18.0}),
+        ("lumetri", {"basic_on": True, "contrast": 16.0, "shadows": 8.0, "highlights": -15.0, "saturation": 96.0, "vibrance": 18.0, "vignette_on": True, "vignette_amount": -1.5}),
     ],
     "crisp": [
         ("lumetri", {"basic_on": True, "contrast": 14.0, "saturation": 104.0, "sharpen": 28.0}),
