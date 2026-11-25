@@ -40,14 +40,9 @@ def _render_base_talking_head(
         s_end = float(seg["source_end"])
         dur = max(0.05, s_end - s_start)
 
-        # Video input
+        # Keep video and audio locked from the SAME source clip (never separate WAV/MP4 seek!)
         args.extend(["-ss", f"{s_start:.3f}", "-t", f"{dur:.3f}", "-i", seg["clip_path"]])
-        v_in = input_idx
-        input_idx += 1
-
-        # Enhanced audio WAV input
-        args.extend(["-ss", f"{s_start:.3f}", "-t", f"{dur:.3f}", "-i", seg["enhanced_wav"]])
-        a_in = input_idx
+        src_in = input_idx
         input_idx += 1
 
         v_label = f"v{seg['index']}"
@@ -55,18 +50,23 @@ def _render_base_talking_head(
 
         if seg.get("zoom"):
             v_chain = (
-                f"[{v_in}:v]fps={fps},"
+                f"[{src_in}:v]fps={fps},"
                 f"scale={zoom_w}:{zoom_h}:force_original_aspect_ratio=increase,"
                 f"crop={w}:{h},setsar=1,setpts=PTS-STARTPTS[{v_label}]"
             )
         else:
             v_chain = (
-                f"[{v_in}:v]fps={fps},"
+                f"[{src_in}:v]fps={fps},"
                 f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                 f"crop={w}:{h},setsar=1,setpts=PTS-STARTPTS[{v_label}]"
             )
 
-        a_chain = f"[{a_in}:a]aresample=48000,asetpts=PTS-STARTPTS[{a_label}]"
+        a_chain = (
+            f"[{src_in}:a]highpass=f=80,lowpass=f=14000,afftdn=nf=-25:tn=1,"
+            f"acompressor=threshold=-18dB:ratio=3:attack=5:release=60:makeup=2dB,"
+            f"loudnorm=I=-14:TP=-1.5:LRA=11,"
+            f"aresample=48000,asetpts=PTS-STARTPTS[{a_label}]"
+        )
         filter_lines.append(v_chain)
         filter_lines.append(a_chain)
         concat_inputs.append(f"[{v_label}][{a_label}]")
@@ -108,8 +108,8 @@ def _render_base_talking_head(
     return out_mp4
 
 
-def render_video(project_dir: str | Path) -> dict[str, Any]:
-    """Render final 9:16 MP4 with enhanced audio, B-rolls, and dynamic Arabic captions."""
+def render_video(project_dir: str | Path, backend: str | None = None) -> dict[str, Any]:
+    """Render final 9:16 MP4 via FilmCraft (preferred when installed) or FFmpeg fallback."""
     proj = Path(project_dir).resolve()
     work_dir = proj / "work"
     timeline_file = work_dir / "timeline_resolved.json"
@@ -119,12 +119,19 @@ def render_video(project_dir: str | Path) -> dict[str, Any]:
         )
 
     cfg = ReelcutConfig.load(proj)
-    ffmpeg_exe = get_ffmpeg_exe(cfg.ffmpeg_path)
+    chosen_backend = (backend or cfg.render_backend or "auto").lower()
     timeline = json.loads(timeline_file.read_text(encoding="utf-8"))
 
     segments = timeline.get("segments", [])
     if not segments:
         raise ValueError("Timeline contains no segments to render.")
+
+    if chosen_backend in {"auto", "filmcraft"} and cfg.filmcraft_path:
+        from .filmcraft import render_with_filmcraft
+
+        return render_with_filmcraft(proj, timeline, cfg)
+
+    ffmpeg_exe = get_ffmpeg_exe(cfg.ffmpeg_path)
 
     total_duration = float(timeline["total_duration"])
     brolls = timeline.get("brolls", [])

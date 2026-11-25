@@ -12,7 +12,11 @@ from .brolls import load_broll_index
 from .config import ReelcutConfig
 from .media import enhance_audio_to_wav, extract_wav_16k, get_ffmpeg_exe, probe_media
 from .models import ClipSummary, CompactSegment
-from .speaker import estimate_primary_speaker_profile, is_primary_speaker_segment
+from .speaker import (
+    compute_face_motion_score,
+    estimate_primary_speaker_profile,
+    is_primary_speaker_segment,
+)
 from .vad import (
     SpeechInterval,
     detect_speech_segments,
@@ -253,7 +257,16 @@ def prepare_project(
                 w0 = max(0, int(seg_start * raw_sr))
                 w1 = min(len(raw_audio), int(seg_end * raw_sr))
                 seg_db = measure_interval_dbfs(raw_audio, raw_sr, seg_start, seg_end)
-                if not is_primary_speaker_segment(raw_audio[w0:w1], raw_sr, seg_db, speaker_profile):
+                motion_score = compute_face_motion_score(clip_path, seg_start, seg_end)
+                # Static camera/face threshold (0.35 helps catch motionless listening frames)
+                if not is_primary_speaker_segment(
+                    raw_audio[w0:w1],
+                    raw_sr,
+                    seg_db,
+                    speaker_profile,
+                    motion_score=motion_score,
+                    min_motion_threshold=0.35,
+                ):
                     continue
 
                 seg_counter += 1

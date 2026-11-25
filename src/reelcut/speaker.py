@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -134,11 +135,65 @@ def estimate_primary_speaker_profile(
     return SpeakerProfile(ref_db=ref_db, ref_f0=ref_f0, ref_spec=ref_spec)
 
 
+def compute_face_motion_score(
+    video_path: str | Path,
+    start: float,
+    end: float,
+    num_samples: int = 6,
+) -> float:
+    """Measure center-frame face/lip motion energy across [start, end] using PyAV.
+
+    Returns -1.0 if the video stream cannot be decoded.
+    """
+    try:
+        import av
+
+        dur = max(0.2, end - start)
+        step = dur / max(2, num_samples)
+        frames_gray: list[np.ndarray] = []
+
+        with av.open(str(video_path)) as container:
+            v_stream = next((s for s in container.streams if s.type == "video"), None)
+            if v_stream is None:
+                return -1.0
+            v_stream.thread_type = "AUTO"
+            tb = float(v_stream.time_base) if v_stream.time_base else 1.0 / 30.0
+            container.seek(int(max(0.0, start) / tb), stream=v_stream, any_frame=False, backward=True)
+
+            next_target = start
+            for frame in container.decode(v_stream):
+                t = float(frame.pts * tb) if frame.pts is not None else next_target
+                if t < next_target - 0.02:
+                    continue
+                if t > end + 0.1 or len(frames_gray) >= num_samples:
+                    break
+                arr = frame.to_ndarray(format="gray")
+                h, w = arr.shape
+                # Crop central face/mouth region (30%..70% width, 20%..70% height)
+                crop = arr[int(h * 0.20) : int(h * 0.70), int(w * 0.30) : int(w * 0.70)]
+                if crop.size > 0:
+                    # Downsample 4x for fast noise-tolerant L1 comparison
+                    frames_gray.append(crop[::4, ::4].astype(np.float32))
+                next_target = t + step
+
+        if len(frames_gray) < 2:
+            return -1.0
+        diffs = [
+            float(np.mean(np.abs(frames_gray[i + 1] - frames_gray[i])))
+            for i in range(len(frames_gray) - 1)
+        ]
+        return round(float(np.median(diffs)), 3)
+    except Exception:
+        return -1.0
+
+
 def is_primary_speaker_segment(
     seg_audio: np.ndarray,
     sample_rate: int,
     seg_db: float,
     profile: SpeakerProfile,
+    motion_score: float = -1.0,
+    min_motion_threshold: float | None = None,
 ) -> bool:
     """Return True if an audio segment belongs to the primary on-camera speaker."""
     # Hard floor: far background chatter or room noise
@@ -157,6 +212,15 @@ def is_primary_speaker_segment(
 
     # Same-gender off-camera speaker (quieter + different spectral envelope)
     if seg_db < profile.ref_db - 7.5 and sim < 0.90:
+        return False
+
+    # Visual active-speaker check: reject still-face listening segments when quieter than creator
+    if (
+        min_motion_threshold is not None
+        and motion_score >= 0.0
+        and motion_score < min_motion_threshold
+        and seg_db < profile.ref_db - 2.0
+    ):
         return False
 
     return True

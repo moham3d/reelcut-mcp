@@ -4,7 +4,8 @@ Token-efficient, open-source **9:16 Arabic video editing pipeline + MCP server**
 
 ## Why ReelCut?
 - **0-Token Local Media Processing:** Audio enhancement & `-14 LUFS` mastering (`FFmpeg`), voice activity detection (`Silero VAD` ONNX), and `int8` CPU transcription (`Faster-Whisper`).
-- **Primary-Speaker Isolation (`speaker.py`):** Uses loudness (`dBFS`), fundamental pitch (`F0`), and spectral timbre to reject background chatter and behind-camera prompters even when they read the same script.
+- **Frame-Synced Rendering (`FilmCraft` + `FFmpeg`):** Automatically uses `filmcraft-cli` (when installed under `C:\Program Files\ArtCraft\FilmCraft`) to build an editable `output/project.fcproj` with linked A/V tracks and zero sync drift, falling back to locked-source `FFmpeg` when absent.
+- **Primary-Speaker Isolation (`speaker.py`):** Uses loudness (`dBFS`), fundamental pitch (`F0`), spectral timbre, and center-frame face motion to reject background chatter and behind-camera prompters even when they read the same script.
 - **Minimal LLM Tokens:** The AI reads only compact JSON (`work/transcript_compact.json`), `script.txt` / `script_resources.txt`, and `brolls_index.json` — never raw video/audio.
 - **2-Line Approval Gate:** Before slow CPU rendering starts, the AI presents a concise 2-line Arabic plan summary for confirmation.
 - **Dynamic Arabic RTL Captions & Source QR Codes:** Renders 2–4 word highlighted Arabic captions (`Pillow` + `arabic-reshaper` + `python-bidi`) and optional corner QR badges for citations.

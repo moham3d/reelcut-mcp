@@ -3,10 +3,32 @@
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+FILMCRAFT_CANDIDATES = [
+    r"C:\Program Files\ArtCraft\FilmCraft\filmcraft-cli.exe",
+]
+
+
+def find_filmcraft_cli() -> str | None:
+    """Locate FilmCraft headless CLI if installed on the system."""
+    env_fc = os.getenv("REELCUT_FILMCRAFT_PATH", "").strip()
+    if env_fc and Path(env_fc).is_file():
+        return env_fc
+
+    on_path = shutil.which("filmcraft-cli")
+    if on_path:
+        return on_path
+
+    for candidate in FILMCRAFT_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
+    return None
 
 
 WINDOWS_ARABIC_FONT_CANDIDATES = [
@@ -69,6 +91,8 @@ class ReelcutConfig:
     pexels_api_key: str = ""
     pixabay_api_key: str = ""
     ffmpeg_path: str = ""
+    filmcraft_path: str | None = None
+    render_backend: str = "auto"
     font_path: str = ""
     caption_style: CaptionStyle = field(default_factory=CaptionStyle)
 
@@ -94,5 +118,7 @@ class ReelcutConfig:
             pexels_api_key=os.getenv("PEXELS_API_KEY", "").strip(),
             pixabay_api_key=os.getenv("PIXABAY_API_KEY", "").strip(),
             ffmpeg_path=os.getenv("REELCUT_FFMPEG_PATH", "").strip(),
+            filmcraft_path=find_filmcraft_cli(),
+            render_backend=os.getenv("REELCUT_RENDER_BACKEND", "auto").strip().lower() or "auto",
             font_path=find_default_arabic_font(),
         )

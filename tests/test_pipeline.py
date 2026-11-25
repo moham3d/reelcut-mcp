@@ -163,11 +163,21 @@ def test_synthetic_end_to_end_pipeline(tmp_path: Path) -> None:
     assert plan_res["qr_count"] == 1
     assert "\n" in plan_res["summary_2_lines"]
 
-    render_res = render_video(proj)
+    render_res = render_video(proj, backend="ffmpeg")
     assert render_res["status"] == "rendered"
     assert render_res["resolution"] == "1080x1920"
     out_mp4 = Path(render_res["output_path"])
     assert out_mp4.is_file() and out_mp4.stat().st_size > 10000
+
+    from reelcut.config import find_filmcraft_cli
+
+    if find_filmcraft_cli():
+        fc_res = render_video(proj, backend="filmcraft")
+        assert fc_res["status"] == "rendered"
+        assert fc_res["backend"] == "filmcraft"
+        assert Path(fc_res["project_path"]).is_file()
+        assert Path(fc_res["output_path"]).is_file()
+        assert fc_res["resolution"] == "1080x1920"
 
 
 def test_background_speaker_loudness_gate() -> None:
@@ -209,3 +219,22 @@ def test_behind_camera_prompter_rejection() -> None:
     kept = filter_primary_speaker_intervals(combined, sr, ivs, profile)
     assert len(kept) == 1
     assert kept[0].start == 0.0
+
+
+def test_visual_motion_score_rejects_still_listening_face() -> None:
+    import numpy as np
+    from reelcut.speaker import SpeakerProfile, is_primary_speaker_segment
+
+    sr = 16000
+    t = np.linspace(0, 1.0, sr, endpoint=False, dtype=np.float32)
+    voice = 0.12 * np.sin(2 * np.pi * 120 * t)
+    profile = SpeakerProfile(ref_db=-24.0, ref_f0=120.0, ref_spec=np.zeros(16, dtype=np.float32))
+
+    # Same-ish pitch but quieter (-4 dB) and motionless face -> rejected
+    assert not is_primary_speaker_segment(
+        voice, sr, seg_db=-28.0, profile=profile, motion_score=0.05, min_motion_threshold=0.35
+    )
+    # Active talking face -> accepted
+    assert is_primary_speaker_segment(
+        voice, sr, seg_db=-28.0, profile=profile, motion_score=1.8, min_motion_threshold=0.35
+    )

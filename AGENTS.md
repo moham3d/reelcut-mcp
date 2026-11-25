@@ -15,13 +15,14 @@ ReelCut is a **token-efficient, CPU-friendly local video editing pipeline and MC
 - [src/reelcut/config.py](src/reelcut/config.py) — Environment settings (`.env`), Windows Arabic font discovery, `CaptionStyle`.
 - [src/reelcut/media.py](src/reelcut/media.py) — FFmpeg/FFprobe discovery (`imageio-ffmpeg` fallback), audio extraction, adaptive gating (`agate`) + `-14 LUFS` mastering.
 - [src/reelcut/vad.py](src/reelcut/vad.py) — Silero VAD ONNX (`faster_whisper.vad`) + RMS loudness measurement (`dBFS`).
-- [src/reelcut/speaker.py](src/reelcut/speaker.py) — Primary (on-camera) speaker voiceprint verification (`dBFS` + `F0` pitch + spectral timbre) to reject behind-camera prompters and bystanders.
+- [src/reelcut/speaker.py](src/reelcut/speaker.py) — Primary (on-camera) speaker verification (`dBFS` + `F0` pitch + spectral timbre + center-frame face/lip motion) to reject behind-camera prompters and bystanders.
 - [src/reelcut/transcribe.py](src/reelcut/transcribe.py) — `prepare_project()`: pure-Arabic prompt generation from script, `faster-whisper` (`int8`) transcription, turn splitting, and compact JSON export.
 - [src/reelcut/brolls.py](src/reelcut/brolls.py) — Local B-roll library indexing (`brolls_index.json`) and optional Pexels/Pixabay portrait fetching.
 - [src/reelcut/models.py](src/reelcut/models.py) — Pydantic contracts (`EditPlan`, `PlannedSegment`, `BRollPlacement`, etc.).
 - [src/reelcut/planner.py](src/reelcut/planner.py) — `save_edit_plan()`: validates `EditPlan`, aligns corrected colloquial words to timestamps, generates `summary_2_lines`.
 - [src/reelcut/captions.py](src/reelcut/captions.py) — Renders 2–4 word highlighted Arabic RTL PNG overlays (`Pillow` + `arabic-reshaper` + `python-bidi`) and `qr_url` corner badges.
-- [src/reelcut/renderer.py](src/reelcut/renderer.py) — `render_video()`: trims segments, applies `1.12x` zoom cuts, composites B-rolls, captions, and QR badges into `output/final_reel.mp4`.
+- [src/reelcut/filmcraft.py](src/reelcut/filmcraft.py) — FilmCraft headless NLE backend (`filmcraft-cli.exe`): builds frame-synced `output/project.fcproj` + exports `output/final_reel.mp4` with linked A/V tracks and `A1` audio inserts.
+- [src/reelcut/renderer.py](src/reelcut/renderer.py) — `render_video()`: dispatches to FilmCraft (when installed) or locked-source FFmpeg fallback.
 - [src/reelcut/mcp_server.py](src/reelcut/mcp_server.py) — `MCPServer` (`mcp >= 2.0`) stdio server exposing 5 tools.
 - [src/reelcut/cli.py](src/reelcut/cli.py) — Typer CLI mirror of all pipeline stages.
 

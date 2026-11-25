@@ -150,15 +150,14 @@ def _render_chunk_frame(
     return out_path
 
 
-def build_caption_concat_manifest(
+def render_caption_states(
     timeline_words: list[dict[str, Any]],
-    total_duration: float,
     work_dir: Path,
     font_path: str,
     width: int = 1080,
     style: CaptionStyle | None = None,
-) -> Path:
-    """Render dynamic caption PNG states and write an FFmpeg concat manifest."""
+) -> tuple[list[CaptionState], Path, Path]:
+    """Render dynamic 2-4 word Arabic RTL caption PNG states and return them."""
     cfg_style = style or CaptionStyle()
     captions_dir = work_dir / "captions_frames"
     captions_dir.mkdir(parents=True, exist_ok=True)
@@ -194,6 +193,26 @@ def build_caption_concat_manifest(
             png_path = captions_dir / f"cap_{state_counter:04d}.png"
             _render_chunk_frame(chunk, word_idx, width, cfg_style, font, png_path)
             states.append(CaptionState(start=w_start, end=w_end, image_path=png_path))
+
+    return states, blank_png, captions_dir
+
+
+def build_caption_concat_manifest(
+    timeline_words: list[dict[str, Any]],
+    total_duration: float,
+    work_dir: Path,
+    font_path: str,
+    width: int = 1080,
+    style: CaptionStyle | None = None,
+) -> Path:
+    """Render dynamic caption PNG states and write an FFmpeg concat manifest."""
+    states, blank_png, captions_dir = render_caption_states(
+        timeline_words=timeline_words,
+        work_dir=work_dir,
+        font_path=font_path,
+        width=width,
+        style=style,
+    )
 
     # Build continuous timeline concat manifest covering [0, total_duration]
     manifest_lines = ["ffconcat version 1.0"]
