@@ -31,25 +31,32 @@ def find_filmcraft_cli() -> str | None:
     return None
 
 
-WINDOWS_ARABIC_FONT_CANDIDATES = [
-    r"C:\Windows\Fonts\Cairo-Bold.ttf",
-    r"C:\Windows\Fonts\Tajawal-Bold.ttf",
-    r"C:\Windows\Fonts\tahomabd.ttf",
-    r"C:\Windows\Fonts\arialbd.ttf",
-    r"C:\Windows\Fonts\segoeuib.ttf",
-    r"C:\Windows\Fonts\tahoma.ttf",
+WINDOWS_ARABIC_FONT_NAMES = [
+    "Arsenica-Arabic-Light-TRIAL.ttf",
+    "Cairo-Bold.ttf",
+    "Tajawal-Bold.ttf",
+    "tahomabd.ttf",
+    "arialbd.ttf",
+    "segoeuib.ttf",
+    "tahoma.ttf",
 ]
 
 
 def find_default_arabic_font() -> str:
-    """Locate the best available bold Arabic-capable TTF font on Windows."""
+    """Locate the best available Arabic-capable TTF font in Windows system/user fonts."""
     env_font = os.getenv("REELCUT_FONT_PATH", "").strip()
     if env_font and Path(env_font).is_file():
         return env_font
 
-    for candidate in WINDOWS_ARABIC_FONT_CANDIDATES:
-        if Path(candidate).is_file():
-            return candidate
+    font_dirs = [
+        Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Fonts",
+        Path(r"C:\Windows\Fonts"),
+    ]
+    for name in WINDOWS_ARABIC_FONT_NAMES:
+        for folder in font_dirs:
+            candidate = folder / name
+            if candidate.is_file():
+                return str(candidate)
 
     raise FileNotFoundError(
         "No Arabic-capable TrueType font found. Set REELCUT_FONT_PATH in .env."
