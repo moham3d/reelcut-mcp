@@ -373,8 +373,14 @@ def render_with_filmcraft(
     fx_cmds.append({"id": "mixer.addInsert", "params": {"strip": "A1", "effect": "dynamics_rack"}})
     _run_fc_jsonl(fc_exe, fcproj, fx_cmds)
 
-    # 5. Export final synchronized MP4
-    _run_fc(fc_exe, ["--project", str(fcproj), "export", str(final_mp4), "--format", "h264"])
+    # 5. Export final synchronized MP4 with smooth social bitrate & -14 LUFS loudness
+    try:
+        _run_fc(
+            fc_exe,
+            ["--project", str(fcproj), "export", str(final_mp4), "--preset", "Instagram Reels 1080×1920"],
+        )
+    except RuntimeError:
+        _run_fc(fc_exe, ["--project", str(fcproj), "export", str(final_mp4), "--format", "h264"])
 
     ffmpeg_exe = get_ffmpeg_exe(cfg.ffmpeg_path)
     out_info = probe_media(final_mp4, ffmpeg_exe=ffmpeg_exe)

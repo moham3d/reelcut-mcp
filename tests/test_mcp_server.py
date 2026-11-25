@@ -15,7 +15,7 @@ def test_cli_help() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("prepare", "index-brolls", "fetch-brolls", "apply-plan", "render"):
+    for cmd in ("prepare", "prepare-hybrid", "index-brolls", "fetch-brolls", "apply-plan", "render"):
         assert cmd in result.stdout
 
 
@@ -23,6 +23,7 @@ def test_mcp_tools_registered() -> None:
     tool_names = {t.name for t in mcp._tool_manager.list_tools()}
     assert {
         "prepare_project",
+        "prepare_hybrid_pack",
         "index_brolls",
         "fetch_brolls",
         "save_edit_plan",

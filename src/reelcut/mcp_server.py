@@ -8,6 +8,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 
 from .brolls import fetch_stock_brolls, index_local_brolls
+from .hybrid import prepare_hybrid_pack as _prepare_hybrid_pack
 from .models import EditPlan
 from .planner import save_edit_plan
 from .renderer import render_video as _render_video
@@ -39,6 +40,23 @@ def prepare_project(
         whisper_model=whisper_model,
         auto_trim_silence=auto_trim_silence,
         brolls_dir=brolls_dir,
+    )
+
+
+@mcp.tool()
+def prepare_hybrid_pack(
+    project_dir: str,
+    brolls_dir: str | None = None,
+    include_thumbnails: bool = True,
+) -> dict[str, Any]:
+    """Skip slow CPU Whisper and pack main-speaker VAD speech into one compact MP3
+    (`work/hybrid_speech.mp3`) + 360p midpoint thumbnails + `work/hybrid_map.json`.
+    Ideal when a multimodal AI inspects audio/thumbnails directly in 10-20s.
+    """
+    return _prepare_hybrid_pack(
+        project_dir=project_dir,
+        brolls_dir=brolls_dir,
+        include_thumbnails=include_thumbnails,
     )
 
 

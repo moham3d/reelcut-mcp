@@ -238,3 +238,24 @@ def test_visual_motion_score_rejects_still_listening_face() -> None:
     assert is_primary_speaker_segment(
         voice, sr, seg_db=-28.0, profile=profile, motion_score=1.8, min_motion_threshold=0.35
     )
+
+
+def test_hybrid_pack_creates_audio_and_thumbnails(tmp_path: Path) -> None:
+    from reelcut.hybrid import _save_midpoint_thumbnail, prepare_hybrid_pack
+
+    proj = tmp_path / "hybrid_proj"
+    clips_dir = proj / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    clip1 = clips_dir / "01.mp4"
+    _make_synthetic_clip(clip1, duration=2.5)
+    (proj / "script.txt").write_text("تجربة سكريبت", encoding="utf-8")
+
+    thumb = tmp_path / "thumb.jpg"
+    assert _save_midpoint_thumbnail(clip1, 1.0, thumb)
+    assert thumb.is_file() and thumb.stat().st_size > 500
+
+    res = prepare_hybrid_pack(proj, include_thumbnails=True)
+    assert res["mode"] == "hybrid_ai_pack"
+    assert res["has_script"] is True
+    assert (proj / "work" / "hybrid_map.json").is_file()
+    assert (proj / "work" / "words_detail.json").is_file()

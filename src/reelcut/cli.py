@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 
 from .brolls import fetch_stock_brolls, index_local_brolls
+from .hybrid import prepare_hybrid_pack
 from .planner import save_edit_plan
 from .renderer import render_video
 from .transcribe import prepare_project
@@ -32,6 +33,21 @@ def prepare(
         whisper_model=whisper_model,
         auto_trim_silence=not no_trim,
         brolls_dir=brolls_dir,
+    )
+    typer.echo(json.dumps(res, ensure_ascii=False, indent=2))
+
+
+@app.command("prepare-hybrid")
+def prepare_hybrid(
+    project_dir: Path = typer.Argument(..., help="Project directory with clips/ and optional script"),
+    brolls_dir: Path | None = typer.Option(None, "--brolls", "-b", help="Optional shared B-rolls folder"),
+    no_thumbs: bool = typer.Option(False, "--no-thumbs", help="Skip 360p midpoint thumbnail extraction"),
+) -> None:
+    """Pack VAD-filtered main-speaker speech MP3 + 360p thumbnails for fast multimodal AI planning."""
+    res = prepare_hybrid_pack(
+        project_dir=project_dir,
+        brolls_dir=brolls_dir,
+        include_thumbnails=not no_thumbs,
     )
     typer.echo(json.dumps(res, ensure_ascii=False, indent=2))
 
