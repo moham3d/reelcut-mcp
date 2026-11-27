@@ -184,6 +184,49 @@ def status_cmd() -> None:
 
     print_status()
 
+@app.command("review-takes")
+def review_takes_cmd(
+    project_dir: Path = typer.Argument(..., help="Project directory with a saved plan"),
+    samples: int = typer.Option(3, "--samples", help="Frames sampled per take"),
+    apply_trims: bool = typer.Option(False, "--apply", help="Apply the suggested trims and re-save the plan"),
+) -> None:
+    """Check every planned take visually: presenting to camera, or preparing?"""
+    from .planner import save_edit_plan
+    from .take_vision import review_segments, save_review
+
+    plan_path = project_dir / "work" / "edit_plan.json"
+    if not plan_path.is_file():
+        typer.echo("no work/edit_plan.json - run save_edit_plan first")
+        raise typer.Exit(2)
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    clips = [p for p in (project_dir / "clips").glob("*")
+             if p.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm"}]
+    if not clips:
+        typer.echo("no video in clips/ to check frames against")
+        raise typer.Exit(2)
+    video = sorted(clips)[0]
+    rows = review_segments(video, plan.get("segments", []), samples=samples)
+    path = save_review(project_dir, rows)
+    typer.echo(f"\nreview saved: {path}")
+    prep = [r for r in rows if r.get("usable") is False]
+    if prep:
+        typer.echo(f"{len(prep)} take(s) are preparation shots (phone/away) - "
+                   "replace them with another take of the same line.")
+    if not apply_trims:
+        return
+    changed = 0
+    for row in rows:
+        if row.get("skipped"):
+            continue
+        seg = plan["segments"][row["index"] - 1]
+        new_start = row.get("trim_start") or seg["start"]
+        new_end = row.get("trim_end") or seg["end"]
+        if new_end - new_start >= 1.0 and (new_start, new_end) != (seg["start"], seg["end"]):
+            seg["start"], seg["end"] = round(new_start, 2), round(new_end, 2)
+            changed += 1
+    if changed:
+        save_edit_plan(project_dir=str(project_dir), plan_data=plan)
+        typer.echo(f"trimmed {changed} take(s) and re-saved the plan")
 if __name__ == "__main__":
     app()
 

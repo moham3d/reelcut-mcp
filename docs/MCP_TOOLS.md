@@ -114,3 +114,14 @@ nobody is signed in (the creator signs in once, then the call is repeated), and
 on success the account, visible projects (`title`/`uuid`) and, when given,
 the project uuid saved to `.env` as `REELCUT_FLOW_PROJECT`.
 **Params:** `project` (optional uuid), `wait_seconds` (0 = single check).
+
+
+---
+
+## 11. `review_takes`
+Visual check of the planned takes: presenting to camera, or preparing (phone,
+notes, turned away, talking to somebody else)? Samples frames per segment and
+returns `usable`, `ratio`, `reason`, `trim_start`/`trim_end`, plus
+`preparation_takes` (indices that must be replaced). Writes
+`work/vision_review.json`. **Params:** `project_dir`, `samples` (3).
+Requires `GEMINI_API_KEY`; costs image tokens only.

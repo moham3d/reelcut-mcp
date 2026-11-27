@@ -107,3 +107,31 @@ the creator signs in once in the window that opened, then the call is repeated.
 Failure ordering is deliberate: `broll_flow.available()` checks Chrome, the
 driver and the project uuid **before** any spend, and `generate_brolls` returns
 `not_configured` with the exact missing piece instead of failing mid-render.
+
+## 3. `review_takes` — visual check (audio alone is not enough)
+
+Alignment proves the words match. It cannot prove the take is *presentation*:
+in real sessions the creator checks the phone, glances at notes, turns away or
+talks to somebody off camera **while still saying the line**. A cut built from
+audio only keeps those "preparation" moments — which is exactly why an
+agent-driven edit that looked at frames beat an audio-only cut on the same
+recording.
+
+```powershell
+reelcut review-takes path\to\project            # verdict per planned take
+reelcut review-takes path\to\project --apply    # also apply the suggested trims
+```
+
+Per take it samples frames (default 3) and asks a vision model one question —
+`person|eye_contact|usable|reason`, where person is camera / phone / notes /
+away / other_person / none. The take is usable only when the face is toward the
+lens and the hands are free; `trim_start`/`trim_end` remove preparation frames
+without touching the spoken words.
+
+- Cost: image tokens only (~260 per frame, so a 9-take plan is a few cents).
+- Unusable takes are reported (`preparation_takes`) — replace them with another
+  take of the same line from the transcript, then render.
+- A failed frame never counts as a pass (a blind sample fails closed).
+
+Workflow: `transcribe_voiceover` → choose takes → `save_edit_plan` →
+**`review_takes`** → replace/trim → `render_video`.

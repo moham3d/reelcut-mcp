@@ -221,6 +221,43 @@ def setup_status() -> dict[str, Any]:
 
     return _status()
 
+@mcp.tool()
+def review_takes(project_dir: str, samples: int = 3) -> dict[str, Any]:
+    """Visually check the plan's takes: presenting to camera, or preparing?
+
+    Audio alignment only proves the words match. This samples each planned
+    segment (start/end from work/edit_plan.json) and asks a vision model whether
+    the creator is facing the lens with free hands, or looking at a phone/notes,
+    turned away, or addressing somebody off camera. Takes that are preparation
+    moments should be replaced by another take of the same line before render.
+
+    Returns per-take verdicts (`usable`, `ratio`, `reason`) and suggested
+    `trim_start`/`trim_end` seconds that remove preparation frames without
+    touching the spoken words. Requires GEMINI_API_KEY; costs image tokens only.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    from .take_vision import review_segments, save_review
+
+    proj = _Path(project_dir).resolve()
+    plan_path = proj / "work" / "edit_plan.json"
+    if not plan_path.is_file():
+        return {"status": "no_plan", "hint": "run save_edit_plan first"}
+    plan = _json.loads(plan_path.read_text(encoding="utf-8"))
+    clips = [p for p in (proj / "clips").glob("*")
+             if p.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm"}]
+    if not clips:
+        return {"status": "no_video", "hint": "put the recording in clips/"}
+    rows = review_segments(sorted(clips)[0], plan.get("segments", []),
+                           samples=samples, log=lambda *_: None)
+    path = save_review(proj, rows)
+    prep = [r["index"] for r in rows if r.get("usable") is False]
+    return {"status": "ok", "review_path": str(path),
+            "takes": rows, "preparation_takes": prep,
+            "hint": ("Replace the takes listed in preparation_takes with another "
+                     "take of the same line, or use --apply trims, then render.")}
+
 def main() -> None:
     """Run ReelCut MCP server over stdio."""
     mcp.run(transport="stdio")
