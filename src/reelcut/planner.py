@@ -9,6 +9,7 @@ from typing import Any
 from .brolls import load_broll_index
 from .config import ReelcutConfig
 from .models import EditPlan
+from .words import snap_segment_to_corrected_words
 
 
 def _align_corrected_words(
@@ -137,6 +138,8 @@ def save_edit_plan(
     resolved_brolls: list[dict[str, Any]] = []
     qr_overlays: list[dict[str, Any]] = []
     pending_queries: list[str] = []
+    boundary_adjustments: list[dict[str, Any]] = []
+    warnings: list[str] = []
 
     timeline_cursor = 0.0
     zoom_count = 0
@@ -147,14 +150,32 @@ def save_edit_plan(
         if seg.end <= seg.start:
             raise ValueError(f"Segment {idx} has end <= start ({seg.end} <= {seg.start}).")
 
-        seg_dur = round(seg.end - seg.start, 3)
+        # A human editor never cuts in the middle of a word. Snap the edges
+        # so every word this segment is supposed to say (corrected_text) is
+        # fully audible: extend to the first/last matched Whisper word, never
+        # past the neighbouring word's edge. This is the "مصري" fix — a
+        # segment meant to say "في دكتور مصري" must end after "مصري"
+        # finishes, even when Whisper split it into timed fragments.
+        clip_words = words_by_clip.get(seg.clip_id, [])
+        seg_start, seg_end, adjustments = snap_segment_to_corrected_words(
+            seg.start, seg.end, seg.corrected_text, clip_words
+        )
+        for adj in adjustments:
+            boundary_adjustments.append({"segment": idx, **adj})
+        if not clip_words:
+            warnings.append(
+                f"Segment {idx}: no transcribed words for clip '{seg.clip_id}'; "
+                "boundaries left as-is."
+            )
+
+        seg_dur = round(seg_end - seg_start, 3)
         clip_info = clips_meta[seg.clip_id]
 
         aligned_words = _align_corrected_words(
             seg.corrected_text,
-            words_by_clip.get(seg.clip_id, []),
-            seg.start,
-            seg.end,
+            clip_words,
+            seg_start,
+            seg_end,
             timeline_cursor,
         )
         all_timeline_words.extend(aligned_words)
@@ -191,8 +212,8 @@ def save_edit_plan(
                 "clip_id": seg.clip_id,
                 "clip_path": clip_info["path"],
                 "enhanced_wav": clip_info["enhanced_wav"],
-                "source_start": round(seg.start, 3),
-                "source_end": round(seg.end, 3),
+                "source_start": round(seg_start, 3),
+                "source_end": round(seg_end, 3),
                 "timeline_start": round(timeline_cursor, 3),
                 "timeline_end": round(timeline_cursor + seg_dur, 3),
                 "duration": seg_dur,
@@ -225,6 +246,8 @@ def save_edit_plan(
         "brolls": resolved_brolls,
         "qr_overlays": qr_overlays,
         "pending_broll_queries": pending_queries,
+        "boundary_adjustments": boundary_adjustments,
+        "warnings": warnings,
     }
     (work_dir / "timeline_resolved.json").write_text(
         json.dumps(resolved_payload, ensure_ascii=False, indent=2),
@@ -247,6 +270,8 @@ def save_edit_plan(
         "broll_count": len(resolved_brolls),
         "qr_count": len(qr_overlays),
         "pending_broll_queries": pending_queries,
+        "boundary_adjustments": boundary_adjustments,
+        "warnings": warnings,
         "summary_2_lines": summary_2_lines,
         "plan_path": str(work_dir / "edit_plan.json"),
     }

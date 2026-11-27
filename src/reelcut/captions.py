@@ -13,7 +13,27 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 from PIL import Image, ImageDraw, ImageFont
 
-from .config import CaptionStyle
+from .config import (
+    CaptionStyle,
+    font_covers_text,
+    list_arabic_font_candidates,
+)
+
+
+def resolve_pil_font(font_path: str, shaped_text: str) -> str:
+    """Pick a font that can actually render shaped Arabic text with Pillow.
+
+    Pillow's BASIC layout renders ``arabic_reshaper`` output, which needs
+    Arabic Presentation Forms glyphs. If the requested font lacks them (its
+    captions would be tofu boxes), walk the known candidates for one that
+    covers the text; otherwise keep the requested font.
+    """
+    if font_covers_text(font_path, shaped_text):
+        return font_path
+    for candidate in list_arabic_font_candidates():
+        if candidate != font_path and font_covers_text(candidate, shaped_text):
+            return candidate
+    return font_path
 
 
 @dataclass(slots=True)
@@ -323,7 +343,11 @@ def render_caption_states(
             states.append(CaptionState(start=w_start, end=w_end, image_path=png_path))
 
     if not _render_states_with_browser(jobs, width, cfg_style, font_path):
-        font = _load_font(font_path, cfg_style.font_size)
+        shaped_all = "".join(
+            _shape_arabic_word(str(w["word"])) for chunk in chunks for w in chunk
+        )
+        pil_font_path = resolve_pil_font(font_path, shaped_all)
+        font = _load_font(pil_font_path, cfg_style.font_size)
         for chunk, word_idx, png_path in jobs:
             _render_chunk_frame(chunk, word_idx, width, cfg_style, font, png_path)
 
@@ -469,14 +493,11 @@ img {{ width: {qr_w}px; height: {qr_h}px; display: block; border-radius: 6px; }}
         if rendered_with_browser:
             return out_path
 
-        # Fallback: use Tahoma/Arial bold for Pillow BASIC shaping if browser unavailable
-        fallback_font_path = font_path
-        for cand in (r"C:\Windows\Fonts\tahomabd.ttf", r"C:\Windows\Fonts\arialbd.ttf"):
-            if Path(cand).is_file() and "Playpen" in Path(font_path).name:
-                fallback_font_path = cand
-                break
-        font = _load_font(fallback_font_path, 22)
+        # Fallback: render with Pillow. Use a font that actually covers the
+        # reshaped label glyphs instead of silently drawing tofu boxes.
         visual_label = _shape_arabic_word(label.strip())
+        fallback_font_path = resolve_pil_font(font_path, visual_label)
+        font = _load_font(fallback_font_path, 22)
         bbox = draw.textbbox((0, 0), visual_label, font=font)
         lw = bbox[2] - bbox[0]
         lh = bbox[3] - bbox[1]

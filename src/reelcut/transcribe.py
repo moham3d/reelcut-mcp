@@ -23,6 +23,7 @@ from .vad import (
     load_pcm16_mono,
     measure_interval_dbfs,
 )
+from .words import correct_with_script, flag_retakes, sanitize_word_timings
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}
 
@@ -189,6 +190,10 @@ def prepare_project(
 
         # Run Whisper once on natural raw audio with tight pause splitting (180ms),
         # then split any merged segment at >= 0.25s pauses and verify the primary speaker.
+        # Pass a numpy array, never a file path: faster-whisper 1.2.1 decodes
+        # file paths via av.open(..., metadata_errors="ignore"), which the
+        # installed PyAV 19 rejects (TypeError). The numpy path bypasses av
+        # entirely, so transcription works with any PyAV version.
         segments_iter, _ = model.transcribe(
             raw_audio,
             language=cfg.language,
@@ -215,10 +220,15 @@ def prepare_project(
                     "word": (w.word or "").strip(),
                     "start": round(float(w.start), 3),
                     "end": round(float(w.end), 3),
+                    "prob": round(float(getattr(w, "probability", 0.0) or 0.0), 3),
                 }
                 for w in (getattr(seg, "words", None) or [])
                 if (w.word or "").strip()
             ]
+            # Whisper word timings are noisy on fast colloquial Arabic (a single
+            # word can span seconds). Sanitize before anything downstream — the
+            # planner's word-boundary snapping, the caption timing — trusts them.
+            raw_words, _ = sanitize_word_timings(raw_words)
 
             # Split at >= 0.25s internal pauses so prompter & creator turns are checked separately
             turns: list[tuple[float, float, str, list[dict[str, Any]]]] = []
@@ -254,6 +264,17 @@ def prepare_project(
                 if not text or seg_end <= seg_start + 0.1:
                     continue
 
+                # Listen like a human: the speaker was reading script_text, so
+                # repair Whisper's Egyptian-dialect mishearings (البكسر/البوكسر،
+                # قط/قطن، مصر/مصري) only where the script line matches the turn.
+                # Real improvisation does not match any script line and is kept.
+                corrections: list[dict[str, Any]] = []
+                raw_text = text
+                if seg_words and script_text:
+                    seg_words, corrections = correct_with_script(seg_words, script_text)
+                    if corrections:
+                        text = " ".join(w["word"] for w in seg_words)
+
                 w0 = max(0, int(seg_start * raw_sr))
                 w1 = min(len(raw_audio), int(seg_end * raw_sr))
                 seg_db = measure_interval_dbfs(raw_audio, raw_sr, seg_start, seg_end)
@@ -288,7 +309,27 @@ def prepare_project(
                     "start": seg_start,
                     "end": seg_end,
                     "words": seg_words,
+                    "raw_text": raw_text,
+                    "corrections": corrections,
                 }
+
+    # Edit like a human: the same line is often said two or three times while
+    # rehearsing. Keep only the cleanest delivery; flag the rest as retakes so
+    # the director never stitches a rehearsal into the final reel.
+    retake_map = flag_retakes(
+        [
+            {
+                "id": s.id,
+                "text": s.text,
+                "start": s.start,
+                "words": words_detail[s.id].get("words", []),
+            }
+            for s in compact_segments
+        ]
+    )
+    for seg in compact_segments:
+        if seg.id in retake_map:
+            seg.retake_of = retake_map[seg.id]
 
     resolved_brolls_dir = Path(brolls_dir).resolve() if brolls_dir else cfg.brolls_dir
     local_brolls = load_broll_index(proj, resolved_brolls_dir)

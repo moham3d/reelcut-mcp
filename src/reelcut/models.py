@@ -21,6 +21,10 @@ class CompactSegment(BaseModel):
     start: float
     end: float
     text: str
+    # Set when this segment repeats a line said better elsewhere: the id of
+    # the best delivery of the same line. A human editor drops retakes; the
+    # director reads this and does the same.
+    retake_of: str | None = None
 
 
 class ClipSummary(BaseModel):

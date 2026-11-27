@@ -23,6 +23,10 @@ dependencies = [
   "pydantic>=2.7.0",
   "qrcode>=7.4",
   "playwright>=1.45.0",
+  # Direct dep: caption font selection verifies glyph coverage via the cmap.
+  # (faster-whisper also needs av, but only its file-path decoder does — the
+  # pipeline passes numpy arrays, so av is intentionally not pinned here.)
+  "fonttools>=4.0.0",
 ]
 
 [project.optional-dependencies]

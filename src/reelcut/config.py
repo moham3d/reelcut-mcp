@@ -53,11 +53,47 @@ WINDOWS_ARABIC_FONT_NAMES = [
 ]
 
 
-def find_default_arabic_font() -> str:
-    """Locate the best available Arabic-capable TTF font in bundled or Windows fonts."""
+def font_covers_text(font_path: str, shaped_text: str) -> bool:
+    """Check whether a font has glyphs for every codepoint in shaped text.
+
+    The Pillow path renders Arabic through ``arabic_reshaper``, which turns
+    letters into Arabic Presentation Forms (U+FB50-FDFF, U+FE70-FEFF). A font
+    can be "Arabic-capable" yet lack those forms — Playpen Sans Arabic and
+    Markazi Text do — and Pillow then renders tofu boxes with no error.
+    This check reads the font's cmap with fontTools and verifies coverage.
+    """
+    try:
+        from fontTools.ttLib import TTFont
+
+        with TTFont(font_path, fontNumber=0, lazy=True) as font:
+            cmap = font.getBestCmap()
+        return all(ord(ch) in cmap for ch in shaped_text)
+    except Exception:
+        return False
+
+
+def font_supports_arabic_presentation_forms(font_path: str) -> bool:
+    """Check whether a font covers the reshaped forms of the whole alphabet.
+
+    Reshaping every Arabic letter in all positions yields the presentation
+    forms any reshaped caption could need. A font passing this check renders
+    any Pillow/arabic-reshaper caption without tofu.
+    """
+    try:
+        import arabic_reshaper
+
+        probe = arabic_reshaper.reshape("ابتثجحخدرزسشصضطظعغفقكلمنهوي")
+    except Exception:
+        return False
+    return font_covers_text(font_path, probe)
+
+
+def list_arabic_font_candidates() -> list[str]:
+    """All existing Arabic-capable font paths, in priority order."""
+    candidates: list[str] = []
     env_font = os.getenv("REELCUT_FONT_PATH", "").strip()
     if env_font and Path(env_font).is_file():
-        return env_font
+        candidates.append(env_font)
 
     repo_fonts = Path(__file__).resolve().parents[2] / "assets" / "fonts"
     font_dirs = [
@@ -71,16 +107,31 @@ def find_default_arabic_font() -> str:
     for name in WINDOWS_ARABIC_FONT_NAMES:
         for folder in font_dirs:
             candidate = folder / name
-            if candidate.is_file():
-                return str(candidate)
-    # Linux fallback: common Noto Sans Arabic / DejaVu Sans
+            if candidate.is_file() and str(candidate) not in candidates:
+                candidates.append(str(candidate))
     for linux_font in (
         "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     ):
-        if Path(linux_font).is_file():
-            return linux_font
+        if Path(linux_font).is_file() and linux_font not in candidates:
+            candidates.append(linux_font)
+    return candidates
+
+
+def find_default_arabic_font() -> str:
+    """Locate the best available Arabic-capable TTF font in bundled or Windows fonts.
+
+    Prefers a font that covers Arabic Presentation Forms, so the Pillow
+    caption path (arabic_reshaper) never renders tofu boxes. Falls back to
+    the first existing candidate if none covers the forms.
+    """
+    candidates = list_arabic_font_candidates()
+    for candidate in candidates:
+        if font_supports_arabic_presentation_forms(candidate):
+            return candidate
+    if candidates:
+        return candidates[0]
 
     raise FileNotFoundError(
         "No Arabic-capable TrueType font found. Set REELCUT_FONT_PATH in .env."
