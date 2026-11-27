@@ -65,6 +65,11 @@ def _marker() -> Path:
     return Path.home() / ".reelcut" / "flow_session.json"
 
 
+def save_project(uuid: str) -> Path:
+    """Public wrapper: persist REELCUT_FLOW_PROJECT in the repo .env."""
+    return _save_env_project(uuid)
+
+
 def _save_env_project(uuid: str) -> Path:
     """Persist REELCUT_FLOW_PROJECT in the repo .env (git-ignored)."""
     repo = Path(__file__).resolve().parents[2]
@@ -321,3 +326,4 @@ def generate(spec: list[dict[str, Any]], out_dir: str | Path,
                  finished_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
     save()
     return state
+

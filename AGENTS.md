@@ -54,3 +54,4 @@ When a user asks to edit a project folder (containing raw clips in `clips/` or r
 - See [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) for full tool schemas and [examples/sample_plan.json](examples/sample_plan.json) for a valid `EditPlan`.
 
 
+

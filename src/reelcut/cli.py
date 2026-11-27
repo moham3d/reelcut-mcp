@@ -92,8 +92,101 @@ def render(
     typer.echo(json.dumps(res, ensure_ascii=False, indent=2))
 
 
+@app.command("transcribe-gemini")
+def transcribe_gemini_cmd(
+    project_dir: Path = typer.Argument(..., help="Project directory"),
+    audio: Path | None = typer.Option(None, "--audio", "-a",
+                                      help="Recording file (default: the file in clips/)"),
+    model: str = typer.Option("gemini-3.5-flash", "--model", "-m"),
+) -> None:
+    """Clean voiceover script + cut-safe timings (Gemini text, local VAD time)."""
+    from .transcribe_gemini import transcribe_voiceover, write_transcript
+
+    target = audio
+    if target is None:
+        found = sorted((project_dir / "clips").glob("*")) or sorted(project_dir.glob("*.mp4"))
+        if not found:
+            raise typer.BadParameter("no recording found in clips/ (pass --audio)")
+        target = found[0]
+    res = transcribe_voiceover(target, model=model)
+    path = write_transcript(project_dir, res)
+    typer.echo(f"speech {res['speech_seconds']}s | {res['windows']} windows | "
+               f"{len(res['dropped'])} dropped | {path}")
+    for seg in res["segments"]:
+        when = (f"{seg['start']:6.2f}-{seg['end']:6.2f}"
+                if seg.get("start") is not None else "   ?  -   ? ")
+        typer.echo(f"[{when}] {seg['text']}")
+
+
+@app.command("brolls")
+def brolls_cmd(
+    project_dir: Path = typer.Argument(..., help="Project directory with a saved plan"),
+    provider: str = typer.Option("gemini_image", "--provider", "-p",
+                                 help="gemini_image | flow_video | manual | stock"),
+    confirm: bool = typer.Option(False, "--confirm", help="Actually spend (default: quote only)"),
+    max_clips: int | None = typer.Option(None, "--max-clips"),
+    budget_usd: float | None = typer.Option(None, "--budget-usd"),
+    budget_credits: int | None = typer.Option(None, "--budget-credits"),
+) -> None:
+    """Quote, then generate the plan's B-rolls as 9:16 clips."""
+    from .broll_ai import estimate, generate_brolls, plan_prompts
+
+    specs = plan_prompts(project_dir)
+    if not specs:
+        typer.echo("no broll_suggestions in work/edit_plan.json")
+        raise typer.Exit(2)
+    typer.echo(f"clips: {len(specs)} | estimate: {estimate(specs, provider)}")
+    if not confirm:
+        for s in specs:
+            typer.echo(f"  - {s['name']} ({s['duration']}s) {s['prompt'][:80]}")
+        typer.echo("quote only - pass --confirm to generate")
+        return
+    out = generate_brolls(project_dir=project_dir, provider=provider,
+                          confirm=True, max_clips=max_clips,
+                          budget_usd=budget_usd,
+                          budget_credits=budget_credits)
+    typer.echo(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+@app.command("flow-login")
+def flow_login_cmd(
+    project: str | None = typer.Option(None, "--project", "-p",
+                                       help="Flow project uuid to save"),
+    wait: int = typer.Option(0, "--wait", help="Seconds to wait for the sign-in"),
+    u_index: int = typer.Option(0, "--u", help="Google account index in the profile"),
+) -> None:
+    """One-time Flow setup: open the automation Chrome, sign in, save the project."""
+    from .broll_flow import login
+
+    out = login(project=project, wait_seconds=wait, u_index=u_index)
+    typer.echo(json.dumps(out, ensure_ascii=False, indent=2))
+    if out.get("status") != "ok":
+        raise typer.Exit(3)
+
+
+@app.command("setup")
+def setup_cmd(
+    wait: int = typer.Option(180, "--wait", help="Seconds to wait for the Google sign-in"),
+    no_key_prompt: bool = typer.Option(False, "--no-key-prompt"),
+    no_input: bool = typer.Option(False, "--no-input", help="Non-interactive"),
+) -> None:
+    """Guided first run: Gemini key, Google sign-in, credits, project."""
+    from .firstrun import setup
+
+    raise typer.Exit(setup(wait_seconds=wait, ask_key=not no_key_prompt,
+                           interactive=not no_input))
+
+
+@app.command("status")
+def status_cmd() -> None:
+    """Show setup status in plain language (no browser, no credits)."""
+    from .firstrun import print_status
+
+    print_status()
+
 if __name__ == "__main__":
     app()
+
 
 
 

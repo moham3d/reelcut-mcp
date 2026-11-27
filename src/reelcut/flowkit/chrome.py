@@ -318,13 +318,33 @@ def credits(page: Page, log=print) -> dict:
         return out
     out['opened'] = True
     try:
+        # The panel mounts before its content fills in, so a single read can
+        # catch an empty shell (measured: "Sign out..." with no balance). Poll
+        # for a line that actually mentions credits.
+        panel = page.locator(S.ACCOUNT_PANEL_SEL).first
+        text = ''
+        for _ in range(14):
+            try:
+                text = panel.inner_text() or ''
+            except PWError:
+                text = ''
+            if re.search(r'credits?', text, re.I):
+                break
+            page.wait_for_timeout(500)
+        out['panel_text'] = text[:800]
         region = page.locator(S.CREDITS_SEL)
         if region.count():
             out['credits_text'] = (region.first.inner_text() or '')[:300]
-        out['panel_text'] = (page.locator(S.ACCOUNT_PANEL_SEL).first.inner_text() or '')[:800]
     except PWError:
         pass
     out['credits'] = _parse_credits(out['credits_text'] or out['panel_text'])
     out['credits_num'] = _as_int(out['credits'])
     out['closed'] = close_account_panel(page, log=log)
+    if not out['closed']:
+        try:
+            page.keyboard.press('Escape')
+            page.wait_for_timeout(400)
+            out['closed'] = overlay_count(page) == 0
+        except PWError:
+            pass
     return out

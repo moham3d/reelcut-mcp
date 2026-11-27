@@ -208,6 +208,19 @@ def flow_login(project: str | None = None, wait_seconds: int = 0) -> dict[str, A
 
     return _flow_login(project=project, wait_seconds=wait_seconds)
 
+
+
+@mcp.tool()
+def setup_status() -> dict[str, Any]:
+    """Plain-language setup state: Gemini key, Flow session, credits, project.
+
+    Offline and free. Use it before the first paid call to tell the creator
+    exactly what is missing (and to point them at `reelcut setup`).
+    """
+    from .firstrun import status as _status
+
+    return _status()
+
 def main() -> None:
     """Run ReelCut MCP server over stdio."""
     mcp.run(transport="stdio")
@@ -215,5 +228,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
