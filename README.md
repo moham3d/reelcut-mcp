@@ -98,3 +98,4 @@ my_video_project/
 - [.agents/skills/reelcut/SKILL.md](.agents/skills/reelcut/SKILL.md) — Bundled Antigravity/Agent skill.
 - [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) — MCP tools & `EditPlan` schema reference.
 - [llms.txt](llms.txt) — Machine-readable project map.
+

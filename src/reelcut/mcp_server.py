@@ -8,19 +8,30 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 
 from .brolls import fetch_stock_brolls, index_local_brolls
+from .broll_ai import estimate as broll_estimate
+from .broll_ai import generate_brolls as _generate_brolls
+from .broll_ai import plan_prompts as broll_plan_prompts
+from .broll_ai import status as broll_status
 from .hybrid import prepare_hybrid_pack as _prepare_hybrid_pack
 from .models import EditPlan
 from .planner import save_edit_plan
 from .renderer import render_video as _render_video
 from .transcribe import prepare_project as _prepare_project
+from .transcribe_gemini import transcribe_voiceover as _transcribe_voiceover
+from .transcribe_gemini import write_transcript as _write_transcript
 
 mcp = MCPServer(
     "reelcut",
     instructions=(
         "Token-efficient local 9:16 Arabic video editing server. "
-        "Always run prepare_project first, read the compact transcript & script, "
-        "save the plan via save_edit_plan, show the 2-line Arabic summary to the user "
-        "for approval, and ONLY call render_video after the user approves."
+        "For Arabic voiceover recordings with retakes, prefer transcribe_voiceover: it "
+        "extracts the final clean script (Gemini) and returns segments whose start/end "
+        "seconds come from local VAD, so cuts never land mid-word. "
+        "Always read the transcript & script, save the plan via save_edit_plan, show the "
+        "2-line Arabic summary to the user for approval, and ONLY call render_video after "
+        "the user approves. B-rolls: if the plan has suggestions, generate_brolls can make "
+        "them with Gemini images (9:16 stills + camera move) after quoting the cost and "
+        "receiving confirm=True; otherwise ask the creator to drop files in brolls/."
     ),
 )
 
@@ -104,6 +115,83 @@ def render_video(project_dir: str) -> dict[str, Any]:
     return _render_video(project_dir=project_dir)
 
 
+@mcp.tool()
+def transcribe_voiceover(project_dir: str, audio: str | None = None,
+                         model: str | None = None) -> dict[str, Any]:
+    """Gemini voiceover transcription with exact cut-safe timings.
+
+    Pass A (whole recording) applies the voiceover-editor system instruction:
+    keep only the final take of each line, drop stumbles/false starts/breaths and
+    off-script chatter, stitch pickups, preserve the dialect, return a clean script.
+    Pass B (local Silero VAD) finds speech windows and aligns those script lines
+    onto them, so `segments[i].start/end` are real audio seconds that always fall
+    in silence — safe to cut without touching the result.
+
+    Writes work/gemini_transcript.json. Requires GEMINI_API_KEY.
+    `audio` defaults to the single file in clips/ (or the project root).
+    """
+    import json as _json
+
+    from .transcribe_gemini import _pcm16
+
+    proj = Path(project_dir).resolve()
+    if audio:
+        target = Path(audio)
+    else:
+        candidates = [p for p in (proj / "clips").glob("*")
+                      if p.suffix.lower() in {".mp4", ".mov", ".mkv", ".wav",
+                                              ".m4a", ".mp3", ".webm"}] or \
+                     [p for p in proj.glob("*") if p.suffix.lower() in
+                      {".mp4", ".mov", ".mkv", ".wav", ".m4a", ".mp3"}]
+        if not candidates:
+            return {"status": "no_audio",
+                    "hint": "Put the recording in clips/ or pass audio=..."}
+        target = sorted(candidates)[0]
+    res = _transcribe_voiceover(target, model=model or "gemini-3.5-flash")
+    path = _write_transcript(proj, res)
+    return {"status": "ok", "transcript_path": str(path),
+            "audio": str(target), "model": res["model"],
+            "speech_seconds": res["speech_seconds"], "windows": res["windows"],
+            "segments": res["segments"], "dropped": res["dropped"],
+            "script": res["script"],
+            "hint": "Build EditPlan.segments from these start/end/text values."}
+
+
+@mcp.tool()
+def generate_brolls(project_dir: str, provider: str = "gemini_image",
+                    confirm: bool = False, max_clips: int | None = None,
+                    budget_usd: float | None = None) -> dict[str, Any]:
+    """Generate the plan's B-rolls as 9:16 clips (Gemini images + camera move).
+
+    Reads work/edit_plan.json -> broll_suggestions, writes clips into brolls/
+    using the suggested filenames, indexes them and returns
+    `attachments` (segment_index -> broll_id) for save_edit_plan.
+
+    Always quotes first: without confirm=True it returns the image count and
+    estimated USD. `budget_usd` is a hard ceiling. Providers: gemini_image
+    (default, no browser), manual (prints the filenames), stock/flow_video
+    (gemini_image/mannual need no browser; flow_video drives the automation\n    Chrome (REELCUT_FLOW_PROJECT) and costs ~3 credits/second).
+    """
+    return _generate_brolls(project_dir=project_dir, provider=provider,
+                            confirm=confirm, max_clips=max_clips,
+                            budget_usd=budget_usd)
+
+
+@mcp.tool()
+def broll_status(project_dir: str) -> dict[str, Any]:
+    """Progress of the last B-roll batch (job file) + clips already on disk."""
+    return broll_status(project_dir)
+
+
+@mcp.tool()
+def quote_brolls(project_dir: str, provider: str = "gemini_image") -> dict[str, Any]:
+    """Free quote for the plan's B-rolls: prompts, filenames and estimated USD."""
+    specs = broll_plan_prompts(project_dir)
+    return {"clips": len(specs), "files": [s["name"] for s in specs],
+            "durations": [s["duration"] for s in specs],
+            "estimate": broll_estimate(specs, provider=provider)}
+
+
 def main() -> None:
     """Run ReelCut MCP server over stdio."""
     mcp.run(transport="stdio")
@@ -111,3 +199,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

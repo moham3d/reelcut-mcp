@@ -126,6 +126,10 @@ class ReelcutConfig:
     render_backend: str = "auto"
     color_preset: str = "none"
     font_path: str = ""
+    gemini_transcribe_model: str = "gemini-3.5-flash"
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    broll_provider: str = "gemini_image"
+    broll_budget_usd: float | None = None
     caption_style: CaptionStyle = field(default_factory=CaptionStyle)
 
     @classmethod
@@ -154,4 +158,32 @@ class ReelcutConfig:
             render_backend=os.getenv("REELCUT_RENDER_BACKEND", "auto").strip().lower() or "auto",
             color_preset=os.getenv("REELCUT_COLOR_PRESET", "none").strip().lower() or "none",
             font_path=find_default_arabic_font(),
+            gemini_transcribe_model=os.getenv(
+                "REELCUT_GEMINI_TRANSCRIBE_MODEL", "gemini-3.5-flash").strip()
+            or "gemini-3.5-flash",
+            gemini_image_model=os.getenv(
+                "REELCUT_GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image").strip()
+            or "gemini-2.5-flash-image",
+            broll_provider=os.getenv(
+                "REELCUT_BROLL_PROVIDER", "gemini_image").strip()
+            or "gemini_image",
+            broll_budget_usd=_float_or_none(
+                os.getenv("REELCUT_BROLL_BUDGET_USD", "")),
         )
+
+
+def _float_or_none(raw: str) -> float | None:
+    try:
+        value = float(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _float_or_none(raw: str) -> float | None:
+    try:
+        value = float(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+

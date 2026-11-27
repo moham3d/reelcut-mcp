@@ -75,3 +75,31 @@ Executes local FFmpeg + Pillow RTL caption rendering and outputs `<project_dir>/
 
 **Returns:**
 `{"status": "rendered", "output_path": "...", "duration": ..., "resolution": "1080x1920", "size_mb": ...}`
+
+
+---
+
+## 6. `transcribe_voiceover`
+Gemini clean-script pass (voiceover editor system instruction: final take only,
+stumbles/chatter dropped, pickups stitched, dialect preserved) + a local Silero
+VAD pass that assigns real seconds. Writes `work/gemini_transcript.json`.
+**Params:** `project_dir`, `audio` (optional path), `model` (default `gemini-3.5-flash`).
+**Returns:** `segments` (`start`,`end`,`text`,`score`), `dropped`, `script`,
+`speech_seconds`, `windows`, `transcript_path`. Requires `GEMINI_API_KEY`.
+
+## 7. `quote_brolls`
+Free quote for the plan's `broll_suggestions`: filenames, durations and the
+estimated USD for the chosen provider.
+
+## 8. `generate_brolls`
+Renders the plan's B-rolls into `brolls/` with the suggested filenames.
+**Params:** `project_dir`, `provider` (`gemini_image`|`flow_video`|`manual`|`stock`),
+`confirm` (nothing is spent without it), `max_clips`, `budget_usd` (images),
+`budget_credits` (Flow video, ~3 credits/second).
+**Returns:** `status` (`needs_confirmation`|`budget_exceeded`|`done`|`partial`|
+`manual_only`|`not_configured`), `estimate`, `attachments`
+(`segment_index` → `broll_id`), `hint`.
+
+## 9. `broll_status`
+Progress of the last batch (`work/broll_job.json`) + clips already on disk.
+
