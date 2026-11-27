@@ -82,3 +82,28 @@ VIDEO, and each finished tile is downloaded by name before the next submission.
 - Both tools degrade honestly: no key → a clear error; no suggestions → nothing
   to generate; unsupported provider → `not_configured`.
 
+
+## First run: when is a Google login actually needed?
+
+| path | login | what the user provides |
+|---|---|---|
+| `transcribe_voiceover` | **never** | `GEMINI_API_KEY` in `.env` |
+| `generate_brolls(provider="gemini_image")` | **never** | same key |
+| `generate_brolls(provider="flow_video")` | **once, ever** | Chrome signed into Flow + a project uuid |
+
+Only the browser path needs a session, and only its first use. Two ways to set
+it up (both spend nothing):
+
+```powershell
+reelcut flow-login --wait 180                 # opens Chrome, waits for sign-in
+reelcut flow-login --project <uuid>           # saves REELCUT_FLOW_PROJECT to .env
+```
+
+It verifies the account, lists the visible projects (`title -> uuid`) and writes
+`~/.reelcut/flow_session.json`. From an MCP-only client, call `flow_login`
+first: with nobody signed in it returns `status="sign_in_required"` and a hint —
+the creator signs in once in the window that opened, then the call is repeated.
+
+Failure ordering is deliberate: `broll_flow.available()` checks Chrome, the
+driver and the project uuid **before** any spend, and `generate_brolls` returns
+`not_configured` with the exact missing piece instead of failing mid-render.

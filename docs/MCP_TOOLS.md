@@ -103,3 +103,14 @@ Renders the plan's B-rolls into `brolls/` with the suggested filenames.
 ## 9. `broll_status`
 Progress of the last batch (`work/broll_job.json`) + clips already on disk.
 
+
+
+---
+
+## 10. `flow_login`
+One-time Flow setup for the `flow_video` provider (no credits spent). Opens the
+automation Chrome on flow.google.com; returns `status="sign_in_required"` when
+nobody is signed in (the creator signs in once, then the call is repeated), and
+on success the account, visible projects (`title`/`uuid`) and, when given,
+the project uuid saved to `.env` as `REELCUT_FLOW_PROJECT`.
+**Params:** `project` (optional uuid), `wait_seconds` (0 = single check).

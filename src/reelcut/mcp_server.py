@@ -192,6 +192,22 @@ def quote_brolls(project_dir: str, provider: str = "gemini_image") -> dict[str, 
             "estimate": broll_estimate(specs, provider=provider)}
 
 
+
+
+@mcp.tool()
+def flow_login(project: str | None = None, wait_seconds: int = 0) -> dict[str, Any]:
+    """One-time Flow setup for the flow_video provider (no credits spent).
+
+    Opens the automation Chrome on flow.google.com. If nobody is signed in it
+    returns `status="sign_in_required"`: ask the creator to sign in once in that
+    window, then call again (or pass wait_seconds to poll). Once signed in it
+    returns the account, the credit balance, the visible projects and saves the
+    chosen `project` uuid to .env as REELCUT_FLOW_PROJECT.
+    """
+    from .broll_flow import login as _flow_login
+
+    return _flow_login(project=project, wait_seconds=wait_seconds)
+
 def main() -> None:
     """Run ReelCut MCP server over stdio."""
     mcp.run(transport="stdio")
@@ -199,4 +215,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 

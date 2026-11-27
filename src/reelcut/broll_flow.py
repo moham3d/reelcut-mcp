@@ -60,6 +60,93 @@ def estimate_credits(spec: list[dict[str, Any]]) -> int:
                for c in spec)
 
 
+# -------------------------------------------------------------- first-run login
+def _marker() -> Path:
+    return Path.home() / ".reelcut" / "flow_session.json"
+
+
+def _save_env_project(uuid: str) -> Path:
+    """Persist REELCUT_FLOW_PROJECT in the repo .env (git-ignored)."""
+    repo = Path(__file__).resolve().parents[2]
+    env = repo / ".env"
+    lines: list[str] = []
+    if env.is_file():
+        lines = env.read_text(encoding="utf-8").splitlines()
+    lines = [ln for ln in lines if not ln.startswith("REELCUT_FLOW_PROJECT=")]
+    lines.append(f"REELCUT_FLOW_PROJECT={uuid}")
+    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return env
+
+
+def login(project: str | None = None, wait_seconds: int = 0, u_index: int = 0,
+          log: Callable[[str], None] = print) -> dict[str, Any]:
+    """One-time Flow setup: open the automation Chrome, wait for sign-in, verify.
+
+    Nothing is generated and no credit is spent. `wait_seconds=0` is a single
+    check (good for MCP: the agent asks the human to sign in and re-calls);
+    a positive value polls until the session appears.
+    """
+    from .flowkit import chrome, pages
+    from playwright.sync_api import sync_playwright
+
+    chrome.configure(profile=None, port=None, u_index=u_index)
+    chrome.ensure_chrome()
+    out: dict[str, Any] = {"status": "checking", "project": project or ""}
+    with sync_playwright() as p:
+        _browser, ctx = chrome.attach(p)
+        page = ctx.new_page()
+        page.goto(chrome.flow_url(), wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+        deadline = time.time() + max(0, wait_seconds)
+        while not chrome.signed_in(page):
+            if time.time() >= deadline:
+                out.update(
+                    status="sign_in_required",
+                    hint=("A Chrome window just opened on flow.google.com. Sign in "
+                          "with the Google account that has Flow, then re-run "
+                          "reelcut flow-login (or wait with --wait 180)."))
+                return out
+            log("[login] waiting for the Google sign-in to finish...")
+            time.sleep(5)
+            page.wait_for_timeout(1500)
+        account = ""
+        try:
+            account = chrome.signed_in_as(page)
+        except Exception:  # noqa: BLE001
+            pass
+        credits = {}
+        try:
+            credits = chrome.credits(page, log=lambda *_: None)
+        except Exception:  # noqa: BLE001
+            pass
+        projects: dict[str, str] = {}
+        try:
+            projects = pages.discover_projects(page)
+        except Exception:  # noqa: BLE001
+            pass
+
+    chosen = (project or DEFAULT_PROJECT).strip()
+    if not chosen and len(projects) == 1:
+        chosen = next(iter(projects.values()))
+    env_path = _save_env_project(chosen) if chosen else None
+    marker = _marker()
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({
+        "signed_in_as": account, "credits": credits, "project": chosen,
+        "projects": projects, "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    out.update(status="ok" if chosen else "choose_project",
+               signed_in_as=account, credits=credits,
+               projects=[{"title": title, "uuid": uuid}
+                         for title, uuid in projects.items()],
+               project=chosen, env=str(env_path) if env_path else "",
+               marker=str(marker))
+    if not chosen:
+        out["hint"] = ("Signed in, but no project was chosen. Re-run with "
+                       "`reelcut flow-login --project <uuid>` (see projects).")
+    return out
+
+
 # --------------------------------------------------------------- page helpers
 def _policy_never(page, log: Callable[[str], None]) -> None:
     page.locator('button[aria-label="Agent settings"]').first.click(timeout=8000)

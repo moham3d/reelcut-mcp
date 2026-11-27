@@ -99,3 +99,4 @@ my_video_project/
 - [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) — MCP tools & `EditPlan` schema reference.
 - [llms.txt](llms.txt) — Machine-readable project map.
 
+
